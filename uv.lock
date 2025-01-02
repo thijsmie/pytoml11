@@ -172,6 +172,9 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+test = [
+    { name = "pytest" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -184,6 +187,7 @@ dev = [
 requires-dist = [
     { name = "cibuildwheel", marker = "extra == 'ci'" },
     { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
     { name = "ruff", marker = "extra == 'dev'" },
 ]
 
