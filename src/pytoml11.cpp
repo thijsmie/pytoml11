@@ -48,9 +48,7 @@ AnyItem to_py_value(
     std::shared_ptr<toml::ordered_value> root,
     keypath &path
 );
-Item* _cv_anyitem(AnyItem &item) {
-    return std::visit([](auto&& arg) -> Item* { return arg.get(); }, item);
-}
+Item* _cv_anyitem(AnyItem &item);
 
 toml::ordered_value* resolve(std::shared_ptr<toml::ordered_value> root, keypath &path) {
     toml::ordered_value *v = root.get();
@@ -494,14 +492,10 @@ toml::ordered_value from_py_value(py::object obj) {
 
     throw new pybind11::type_error("Could not be mapped to toml value.");
 }
-void test_function() {
-    toml::ordered_value value = toml::ordered_table({
-        {"test", toml::ordered_value("test")}
-    });
-    value.as_table();
-    value.as_table();
-}
 
+Item* _cv_anyitem(AnyItem &item) {
+    return std::visit([](auto&& arg) -> Item* { return arg.get(); }, item);
+}
 
 PYBIND11_MODULE(_value, m) {
     py::class_<Item, std::shared_ptr<Item>>(m, "Item")
@@ -565,7 +559,6 @@ PYBIND11_MODULE(_value, m) {
 
     m.def("load", &load);
     m.def("dump", &dump);
-    m.def("test", &test_function);
 
     py::register_exception<toml::exception>(m, "TomlError");
 }
