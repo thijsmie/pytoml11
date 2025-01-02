@@ -469,7 +469,7 @@ toml::ordered_value from_py_value(py::object obj) {
     } else if (py::isinstance<py::list>(obj)) {
         py::list entries = obj.cast<py::list>();
         std::vector<toml::ordered_value> converted;
-        for (auto &entry : entries) {
+        for (auto entry : entries) {
             converted.push_back(
                 std::move(from_py_value(entry.cast<py::object>()))
             );
@@ -478,7 +478,7 @@ toml::ordered_value from_py_value(py::object obj) {
     } else if (py::isinstance<py::dict>(obj)) {
         py::dict entries = obj.cast<py::dict>();
         std::map<std::string, toml::ordered_value> converted;
-        for (auto &entry : entries) {
+        for (auto entry : entries) {
             if (!py::isinstance<py::str>(entry.first))
                 throw new pybind11::type_error("Dict key is not a string");
             converted.insert({
