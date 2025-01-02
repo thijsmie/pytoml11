@@ -1,0 +1,39 @@
+name: "Checks"
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest, ubuntu-latest]
+        python-version: ["3.9", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv and set the python version
+      uses: astral-sh/setup-uv@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
+
+    - name: Set up Python
+      run: uv python install
+
+    - name: Install the project
+      run: uv sync --all-extras --dev
+
+    - name: Check formatting
+      run: uvx ruff format --check src/pytoml11
+
+    - name: Check linting
+      run: uvx ruff check src/pytoml11
+
+    - name: Test
+      run: uv run pytest tests
