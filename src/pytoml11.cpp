@@ -204,7 +204,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         std::map<std::string, AnyItem> result;
         for (auto &v : toml_value()->as_table()) {
             auto p = keypath(path);
-            p.push_back({v.first});
+            p.emplace_back(std::string(v.first));
             result[v.first] = to_py_value(root, p);
         }
         return result;
@@ -215,7 +215,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
             throw py::key_error("Key not found");
         }
         auto p = keypath(path);
-        p.push_back({key});
+        p.emplace_back(std::string(key));
         return std::move(to_py_value(root, p));
     }
 
@@ -229,7 +229,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         }
         toml_value()->as_table().insert({key, std::move(*aitem->root)});
         aitem->path = keypath(path);
-        aitem->path.push_back({key});
+        aitem->path.emplace_back(key);
         aitem->root = root;
     }
 
@@ -277,7 +277,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         for (auto &v : value) {
             Item *aitem = _cv_anyitem(v.second);
             toml_value->as_table().insert({v.first, toml::ordered_value(*aitem->root)});
-            aitem->path = keypath({v.first});
+            aitem->path = keypath({Key(v.first)});
             aitem->root = toml_value;
         }
         return std::make_shared<Table>(toml_value);
@@ -306,7 +306,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         for (size_t i = 0; i < value.size(); i++) {
             auto v = value.at(i);
             auto p = keypath(path);
-            p.push_back({i});
+            p.emplace_back(i);
             result.push_back(std::move(to_py_value(root, p)));
         }
         return result;
@@ -320,7 +320,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         auto vec = toml_value()->as_array();
         vec.push_back(std::move(*aitem->root));
         aitem->path = keypath(path);
-        aitem->path.push_back({vec.size() - 1});
+        aitem->path.emplace_back(vec.size() - 1);
         aitem->root = root;
     }
 
@@ -332,7 +332,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         auto vec = toml_value()->as_array();
         vec.insert(vec.begin() + index, std::move(*aitem->root));
         aitem->path = keypath(path);
-        aitem->path.push_back({index});
+        aitem->path.emplace_back(index);
         aitem->root = root;
     }
 
@@ -351,7 +351,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
             throw py::index_error("Index out of range");
         }
         auto p = keypath(path);
-        p.push_back({index});
+        p.emplace_back(index);
         return std::move(to_py_value(root, p));
     }
 
@@ -375,7 +375,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         for (size_t i = 0; i < value.size(); i++) {
             auto v = _cv_anyitem(value.at(i));
             toml_value->as_array().push_back(std::move(*v->root));
-            v->path = keypath({i});
+            v->path = keypath({Key(i)});
             v->root = toml_value;
         }
         return std::make_shared<Array>(toml_value);
