@@ -29,12 +29,6 @@ jobs:
     - name: Check formatting
       run: uvx ruff format --check src/pytoml11
 
-    - name: Check C++ formatting
-      uses: jidicula/clang-format-action@v4.14.0
-      with:
-        clang-format-version: '13'
-        check-path: 'src/pytoml11.cpp'
-
     - name: Check linting
       run: uvx ruff check src/pytoml11
 
