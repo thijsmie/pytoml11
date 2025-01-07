@@ -1,5 +1,10 @@
 # pytoml11
 
+[![image](https://img.shields.io/pypi/v/pytoml11.svg)](https://pypi.python.org/project/pytoml11)
+[![image](https://img.shields.io/pypi/l/pytoml11.svg)](https://pypi.python.org/project/pytoml11)
+[![image](https://img.shields.io/pypi/pyversions/pytoml11.svg)](https://pypi.python.org/project/pytoml11)
+[![Actions status](https://github.com/thijsmie/pytoml11/actions/workflows/checks.yml/badge.svg)](https://github.com/thijsmie/pytoml11/actions)
+
 **`pytoml11`** is a Python binding for the [toml11](https://github.com/ToruNiina/toml11) C++ library, designed to provide a consistant API for editing TOML files with an emphasis on preserving comments and delivering well-formatted output. Just parsing TOML files? Then opt for `tomllib` in the standard library, or `rtoml` if you want that *Rusty speed*.
 
 ## Why pytoml11?
