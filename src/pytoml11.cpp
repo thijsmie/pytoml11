@@ -349,7 +349,7 @@ class DateTime : public std::enable_shared_from_this<DateTime>, public Item {
             if (py_offset.attr("days").cast<int>() != 0 ||
                 py_offset.attr("microseconds").cast<int>() != 0 ||
                 py_offset.attr("seconds").cast<int>() % 60 != 0) {
-                throw new py::value_error("Cannot represent this timezone.");
+                throw py::value_error("Cannot represent this timezone.");
             }
 
             std::shared_ptr<toml::ordered_value> toml_value =
@@ -478,20 +478,14 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         // This function is slightly painful, since erase/remove are not implemented
         // on the ordered_map. We have to pop_back till we find the key, then push
         // the popped values back without the key in question.
-        std::vector<std::pair<std::string, toml::ordered_value>> popped;
-        auto it = table->end();
-        while (it != table->begin()) {
-            it--;
-            if (it->first == key) {
-                break;
+        toml::ordered_map<std::string, toml::ordered_value> new_table;
+        for (auto &kv : *table) {
+            if (kv.first != key) {
+                new_table.insert(kv);
             }
-            popped.push_back(*it);
-            table->pop_back();
         }
-        table->pop_back();
-        for (auto &v : popped) {
-            table->insert(v);
-        }
+        /// swap
+        table->swap(new_table);
     }
 
     AnyItem pop(std::string key) {
@@ -506,7 +500,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
                 std::ostringstream oss;
                 oss << "Cannot update with mapping that contains owned value at key: ";
                 oss << kv.first;
-                throw new py::value_error(oss.str());
+                throw py::value_error(oss.str());
             }
         }
         for (auto &kv : values) {
@@ -615,7 +609,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
     void extend(std::vector<AnyItem> values) {
         for (auto &v : values) {
             if (cast_anyitem_to_item(v)->owned()) {
-                throw new py::value_error("Extending list contains owned value");
+                throw py::value_error("Extending list contains owned value");
             }
         }
 
