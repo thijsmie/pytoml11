@@ -93,6 +93,21 @@ class Array(Item):
         | Time
         | DateTime,
     ) -> None: ...
+    def extend(
+        self,
+        value: list[
+            Boolean
+            | Integer
+            | Float
+            | String
+            | Table
+            | Array
+            | Null
+            | Date
+            | Time
+            | DateTime
+        ],
+    ) -> None: ...
     def copy(self) -> Array: ...
     def insert(
         self,
@@ -225,7 +240,37 @@ class Table(Item):
             | DateTime,
         ],
     ) -> None: ...
+    def update(
+        self,
+        value: dict[
+            str,
+            Boolean
+            | Integer
+            | Float
+            | String
+            | Table
+            | Array
+            | Null
+            | Date
+            | Time
+            | DateTime,
+        ],
+    ) -> None: ...
     def __len__(self) -> int: ...
+    def pop(
+        self, key: str
+    ) -> (
+        Boolean
+        | Integer
+        | Float
+        | String
+        | Table
+        | Array
+        | Null
+        | Date
+        | Time
+        | DateTime
+    ): ...
     def copy(self) -> Table: ...
     @property
     def value(
