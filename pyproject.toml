@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pytoml11"
-version = "0.0.1"
+version = "0.0.2"
 description="Bindings for toml11"
 readme = "README.md"
 authors = [
@@ -83,7 +83,6 @@ ignore = [
   "PLR09",    # Too many X
   "PLR2004",  # Magic comparison
 ]
-isort.required-imports = ["from __future__ import annotations"]
 fixable = ["ALL"]
 
 [dependency-groups]

@@ -3,12 +3,13 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <filesystem>
 #include <iostream>
-#include <vector>
 #include <map>
-#include <variant>
-#include <string>
 #include <memory>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace py = pybind11;
 
@@ -19,17 +20,16 @@ class Float;
 class String;
 class Table;
 class Array;
-class None;
+class Null;
+class Date;
+class Time;
+class DateTime;
 
-typedef std::variant<
-    std::shared_ptr<Boolean>,
-    std::shared_ptr<Integer>,
-    std::shared_ptr<Float>,
-    std::shared_ptr<String>,
-    std::shared_ptr<Table>,
-    std::shared_ptr<Array>,
-    std::shared_ptr<None>
-> AnyItem;
+typedef std::variant<std::shared_ptr<Boolean>, std::shared_ptr<Integer>, std::shared_ptr<Float>,
+                     std::shared_ptr<String>, std::shared_ptr<Table>, std::shared_ptr<Array>,
+                     std::shared_ptr<Null>, std::shared_ptr<Date>, std::shared_ptr<Time>,
+                     std::shared_ptr<DateTime>>
+    AnyItem;
 
 class Key {
   public:
@@ -43,14 +43,10 @@ class Key {
 
 typedef std::vector<Key> keypath;
 
-toml::ordered_value from_py_value(py::object obj);
-AnyItem to_py_value(
-    std::shared_ptr<toml::ordered_value> root,
-    keypath &path
-);
-Item* _cv_anyitem(AnyItem &item);
+AnyItem to_py_value(std::shared_ptr<toml::ordered_value> root, keypath &path);
+Item *cast_anyitem_to_item(AnyItem &item);
 
-toml::ordered_value* resolve(std::shared_ptr<toml::ordered_value> root, keypath &path) {
+toml::ordered_value *resolve(std::shared_ptr<toml::ordered_value> root, keypath &path) {
     toml::ordered_value *v = root.get();
     for (auto &key : path) {
         if (key.is_key) {
@@ -62,8 +58,8 @@ toml::ordered_value* resolve(std::shared_ptr<toml::ordered_value> root, keypath 
     return v;
 }
 
-constexpr toml::spec default_spec () {
-    toml::spec spec = toml::spec::v(1,1,0);
+constexpr toml::spec default_spec() {
+    toml::spec spec = toml::spec::v(1, 1, 0);
     spec.ext_null_value = true;
     return spec;
 }
@@ -73,40 +69,31 @@ class Item : public std::enable_shared_from_this<Item> {
     std::shared_ptr<toml::ordered_value> root;
     keypath path;
 
-    explicit Item(
-        std::shared_ptr<toml::ordered_value> root,
-        keypath &path
-    ) : root(root), path(path) {}
+    explicit Item(std::shared_ptr<toml::ordered_value> root, keypath &path)
+        : root(root), path(path) {}
 
-    explicit Item(
-        std::shared_ptr<toml::ordered_value> root
-    ) : root(root), path({}) {}
+    explicit Item(std::shared_ptr<toml::ordered_value> root) : root(root), path({}) {}
 
-    bool owned() {
-        return !path.empty();
-    }
+    bool owned() { return !path.empty(); }
 
-    toml::ordered_value *toml_value() {
-        return resolve(root, path);
-    }
+    toml::ordered_value *toml_value() { return resolve(root, path); }
 
     std::vector<std::string> const get_comments() {
         std::vector<std::string> the_comments;
-        std::for_each(
-            toml_value()->comments().begin(),
-            toml_value()->comments().end(),
-            [&](auto &v) {the_comments.push_back(v); }
-        );
+        std::for_each(toml_value()->comments().begin(), toml_value()->comments().end(),
+                      [&](auto &v) { the_comments.push_back(v); });
         return std::move(the_comments);
     }
 
     void set_comments(std::vector<std::string> the_comments) {
         toml_value()->comments().clear();
-        std::for_each(
-            the_comments.begin(),
-            the_comments.end(),
-            [&](auto &v) {toml_value()->comments().push_back(v); }
-        );
+        std::for_each(the_comments.begin(), the_comments.end(),
+                      [&](auto &v) { toml_value()->comments().push_back(v); });
+    }
+
+    virtual void rewrite(std::shared_ptr<toml::ordered_value> new_root, keypath new_path) {
+        root = new_root;
+        path = new_path;
     }
 
     virtual ~Item() = default;
@@ -119,18 +106,18 @@ class Boolean : public std::enable_shared_from_this<Boolean>, public Item {
 
     const bool value() { return toml_value()->as_boolean(); }
     std::shared_ptr<Boolean> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
         return std::make_shared<Boolean>(value);
     }
 
     static std::shared_ptr<Boolean> from_value(bool value) {
-        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(value);
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(value);
         return std::make_shared<Boolean>(toml_value);
     }
 
-    std::string repr() {
-        return value() ? "Bool(True)" : "Bool(False)";
-    }
+    std::string repr() { return value() ? "Boolean(True)" : "Boolean(False)"; }
 };
 
 class Integer : public std::enable_shared_from_this<Integer>, public Item {
@@ -139,14 +126,18 @@ class Integer : public std::enable_shared_from_this<Integer>, public Item {
 
     const std::int64_t value() { return toml_value()->as_integer(); }
     std::shared_ptr<Integer> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
         return std::make_shared<Integer>(value);
     }
 
     static std::shared_ptr<Integer> from_value(std::int64_t value) {
-        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(value);
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(value);
         return std::make_shared<Integer>(toml_value);
     }
+
+    std::string repr() { return "Integer(" + std::to_string(value()) + ")"; }
 };
 
 class Float : public std::enable_shared_from_this<Float>, public Item {
@@ -155,17 +146,21 @@ class Float : public std::enable_shared_from_this<Float>, public Item {
 
     const double value() { return toml_value()->as_floating(); }
     std::shared_ptr<Float> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
         return std::make_shared<Float>(value);
     }
 
     static std::shared_ptr<Float> from_value(double value) {
-        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(value);
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(value);
         return std::make_shared<Float>(toml_value);
     }
 
     std::string repr() {
-        return "Float(" + std::to_string(value()) + ")";
+        std::ostringstream oss;
+        oss << "Float(" << std::setprecision(8) << std::noshowpoint << value() << ")";
+        return oss.str();
     }
 };
 
@@ -175,112 +170,374 @@ class String : public std::enable_shared_from_this<String>, public Item {
 
     const std::string value() { return toml_value()->as_string(); }
     std::shared_ptr<String> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
         return std::make_shared<String>(value);
     }
 
     static std::shared_ptr<String> from_value(std::string value) {
-        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(value);
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(value);
         return std::make_shared<String>(toml_value);
     }
 
     std::string repr() {
         std::string v = value();
         std::string::size_type n = 0;
-        while ( ( n = v.find( "\"", n ) ) != std::string::npos )
-        {
-            v.replace( n, 1, "\\\"" );
+        while ((n = v.find("\"", n)) != std::string::npos) {
+            v.replace(n, 1, "\\\"");
             n += 2;
         }
         return "String(\"" + v + "\")";
     }
 };
 
+class Date : public std::enable_shared_from_this<Date>, public Item {
+  public:
+    using Item::Item;
+
+    py::object value() {
+        return py::module::import("datetime")
+            .attr("date")(toml_value()->as_local_date().year,
+                          1 + toml_value()
+                                  ->as_local_date()
+                                  .month, // month_t is 0-indexed, python is 1-indexed
+                          toml_value()->as_local_date().day);
+    }
+
+    std::shared_ptr<Date> copy() {
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
+        return std::make_shared<Date>(value);
+    }
+
+    static std::shared_ptr<Date> from_value(py::object value) {
+        if (!py::isinstance(value, py::module::import("datetime").attr("date"))) {
+            throw py::type_error("Value is not a datetime.date object");
+        }
+
+        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(
+            toml::local_date(value.attr("year").cast<int>(),
+                             (toml::month_t)(value.attr("month").cast<int>() -
+                                             1), // month_t is 0-indexed, python is 1-indexed
+                             value.attr("day").cast<int>()));
+        return std::make_shared<Date>(toml_value);
+    }
+
+    std::string repr() {
+        std::ostringstream oss;
+        oss << "Date(" << std::to_string(toml_value()->as_local_date().year) << "-" << std::setw(2)
+            << std::setfill('0') << std::to_string(toml_value()->as_local_date().month + 1) << "-"
+            << std::setw(2) << std::setfill('0')
+            << std::to_string(toml_value()->as_local_date().day) << ")";
+        return oss.str();
+    }
+};
+
+class Time : public std::enable_shared_from_this<Time>, public Item {
+  public:
+    using Item::Item;
+
+    py::object value() {
+        return py::module::import("datetime")
+            .attr("time")(toml_value()->as_local_time().hour, toml_value()->as_local_time().minute,
+                          toml_value()->as_local_time().second,
+                          ((uint32_t)toml_value()->as_local_time().millisecond) * 1000 +
+                              ((uint32_t)toml_value()->as_local_time().microsecond));
+    }
+
+    uint16_t nanoseconds() { return toml_value()->as_local_time().nanosecond; }
+
+    std::shared_ptr<Time> copy() {
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
+        return std::make_shared<Time>(value);
+    }
+
+    static std::shared_ptr<Time> from_value(py::object value) {
+        if (!py::isinstance(value, py::module::import("datetime").attr("time"))) {
+            throw py::type_error("Value is not a datetime.time object");
+        }
+
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(toml::local_time(
+                value.attr("hour").cast<int>(), value.attr("minute").cast<int>(),
+                value.attr("second").cast<int>(), value.attr("microsecond").cast<int>() / 1000,
+                value.attr("microsecond").cast<int>() % 1000));
+        return std::make_shared<Time>(toml_value);
+    }
+
+    static std::shared_ptr<Time> from_value_with_nanoseconds(py::object value,
+                                                             uint16_t nanoseconds) {
+        if (!py::isinstance(value, py::module::import("datetime").attr("time"))) {
+            throw py::type_error("Value is not a datetime.time object");
+        }
+
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(toml::local_time(
+                value.attr("hour").cast<int>(), value.attr("minute").cast<int>(),
+                value.attr("second").cast<int>(), value.attr("microsecond").cast<int>() / 1000,
+                value.attr("microsecond").cast<int>() % 1000, nanoseconds));
+        return std::make_shared<Time>(toml_value);
+    }
+
+    std::string repr() {
+        std::ostringstream oss;
+        oss << "Time(" << toml_value()->as_local_time() << ")";
+        return oss.str();
+    }
+};
+
+class DateTime : public std::enable_shared_from_this<DateTime>, public Item {
+  public:
+    using Item::Item;
+
+    py::object value() {
+        using namespace pybind11::literals;
+        py::object datetime_ = py::module_::import("datetime");
+
+        if (toml_value()->is_offset_datetime()) {
+            py::object py_offset = datetime_.attr("timedelta")(
+                "hours"_a = toml_value()->as_offset_datetime().offset.hour,
+                "minutes"_a = toml_value()->as_offset_datetime().offset.minute);
+            return datetime_.attr("datetime")(
+                toml_value()->as_offset_datetime().date.year,
+                toml_value()->as_offset_datetime().date.month +
+                    1, // month_t is 0-indexed, python is 1-indexed
+                toml_value()->as_offset_datetime().date.day,
+                toml_value()->as_offset_datetime().time.hour,
+                toml_value()->as_offset_datetime().time.minute,
+                toml_value()->as_offset_datetime().time.second,
+                ((uint32_t)toml_value()->as_offset_datetime().time.millisecond) * 1000 +
+                    ((uint32_t)toml_value()->as_offset_datetime().time.microsecond),
+                "tzinfo"_a = datetime_.attr("timezone")(py_offset));
+        }
+        return datetime_.attr("datetime")(
+            toml_value()->as_local_datetime().date.year,
+            toml_value()->as_local_datetime().date.month +
+                1, // month_t is 0-indexed, python is 1-indexed
+            toml_value()->as_local_datetime().date.day, toml_value()->as_local_datetime().time.hour,
+            toml_value()->as_local_datetime().time.minute,
+            toml_value()->as_local_datetime().time.second,
+            ((uint32_t)toml_value()->as_local_datetime().time.millisecond) * 1000 +
+                ((uint32_t)toml_value()->as_local_datetime().time.microsecond));
+    }
+
+    uint16_t nanoseconds() {
+        if (toml_value()->is_offset_datetime()) {
+            return toml_value()->as_offset_datetime().time.nanosecond;
+        }
+        return toml_value()->as_local_datetime().time.nanosecond;
+    }
+
+    std::shared_ptr<DateTime> copy() {
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
+        return std::make_shared<DateTime>(value);
+    }
+
+    static std::shared_ptr<DateTime> from_value(py::object value) {
+        py::object datetime_ = py::module_::import("datetime");
+
+        if (!py::isinstance(value, datetime_.attr("datetime"))) {
+            throw py::type_error("Value is not a datetime.datetime object");
+        }
+
+        if (py::isinstance(value.attr("tzinfo"), datetime_.attr("tzinfo"))) {
+            py::object py_offset = value.attr("tzinfo").attr("utcoffset")(value);
+
+            if (py_offset.attr("days").cast<int>() != 0 ||
+                py_offset.attr("microseconds").cast<int>() != 0 ||
+                py_offset.attr("seconds").cast<int>() % 60 != 0) {
+                throw new py::value_error("Cannot represent this timezone.");
+            }
+
+            std::shared_ptr<toml::ordered_value> toml_value =
+                std::make_shared<toml::ordered_value>(toml::offset_datetime(
+                    toml::local_date(
+                        value.attr("year").cast<int>(),
+                        (toml::month_t)(value.attr("month").cast<uint8_t>() -
+                                        1), // month_t is 0-indexed, python is 1-indexed
+                        value.attr("day").cast<int>()),
+                    toml::local_time(value.attr("hour").cast<int>(),
+                                     value.attr("minute").cast<int>(),
+                                     value.attr("second").cast<int>(),
+                                     value.attr("microsecond").cast<int>() / 1000,
+                                     value.attr("microsecond").cast<int>() % 1000),
+                    toml::time_offset(py_offset.attr("seconds").cast<int>() / 3600,
+                                      (py_offset.attr("seconds").cast<int>() / 60) % 60)));
+            return std::make_shared<DateTime>(toml_value);
+        }
+
+        std::shared_ptr<toml::ordered_value> toml_value =
+            std::make_shared<toml::ordered_value>(toml::local_datetime(
+                toml::local_date(value.attr("year").cast<int>(),
+                                 (toml::month_t)(value.attr("month").cast<uint8_t>() -
+                                                 1), // month_t is 0-indexed, python is 1-indexed
+                                 value.attr("day").cast<int>()),
+                toml::local_time(value.attr("hour").cast<int>(), value.attr("minute").cast<int>(),
+                                 value.attr("second").cast<int>(),
+                                 value.attr("microsecond").cast<int>() / 1000,
+                                 value.attr("microsecond").cast<int>() % 1000)));
+        return std::make_shared<DateTime>(toml_value);
+    }
+
+    std::string repr() {
+        if (toml_value()->is_offset_datetime()) {
+            std::ostringstream oss;
+            oss << "DateTime(" << toml_value()->as_offset_datetime() << ")";
+            return oss.str();
+        }
+
+        std::ostringstream oss;
+        oss << "DateTime(" << toml_value()->as_local_datetime() << ")";
+        return oss.str();
+    }
+};
+
 class Table : public std::enable_shared_from_this<Table>, public Item {
+  protected:
+    std::map<std::string, AnyItem> cached_items;
+
+  public:
+    explicit Table(std::shared_ptr<toml::ordered_value> root, keypath &path)
+        : Item(root, path), cached_items() {}
+
+    explicit Table(std::shared_ptr<toml::ordered_value> root) : Item(root), cached_items() {}
+
+    virtual void rewrite(std::shared_ptr<toml::ordered_value> new_root, keypath new_path) {
+        root = new_root;
+        path = new_path;
+
+        for (auto &kv : cached_items) {
+            auto p = keypath(path);
+            p.emplace_back(kv.first);
+            cast_anyitem_to_item(kv.second)->rewrite(root, p);
+        }
+    }
+
   public:
     using Item::Item;
 
     std::map<std::string, AnyItem> value() {
         std::map<std::string, AnyItem> result;
         for (auto &v : toml_value()->as_table()) {
-            auto p = keypath(path);
-            p.emplace_back(std::string(v.first));
-            result[v.first] = to_py_value(root, p);
+            result[v.first] = getitem(v.first);
         }
         return result;
     }
 
     AnyItem getitem(const std::string &key) {
-        if (!toml_value()->contains(key)) {
+        auto *table = &toml_value()->as_table();
+        if (table->find(key) == table->end()) {
             throw py::key_error("Key not found");
+        }
+        if (cached_items.find(key) != cached_items.end()) {
+            return cached_items.at(key);
         }
         auto p = keypath(path);
         p.emplace_back(std::string(key));
-        return std::move(to_py_value(root, p));
+        cached_items.insert({key, to_py_value(root, p)});
+        return cached_items.at(key);
     }
 
     void setitem(std::string key, AnyItem item) {
-        Item *aitem = _cv_anyitem(item);
+        Item *aitem = cast_anyitem_to_item(item);
+
         if (aitem->owned()) {
             throw py::type_error("Value is attached, copy first");
         }
-        if (toml_value()->contains(key)) {
+
+        auto *table = &toml_value()->as_table();
+        if (table->find(key) != table->end()) {
             delitem(key);
         }
+
         toml_value()->as_table().insert({key, std::move(*aitem->root)});
-        aitem->path = keypath(path);
-        aitem->path.emplace_back(key);
-        aitem->root = root;
+        auto p = keypath(path);
+        p.emplace_back(key);
+        aitem->rewrite(root, p);
+        cached_items.insert({key, item});
     }
 
     void delitem(const std::string &key) {
-        if (!toml_value()->contains(key)) {
+        auto *table = &toml_value()->as_table();
+        if (table->find(key) == table->end()) {
             throw py::key_error("Key not found");
         }
+
+        auto itt = cached_items.find(key);
+        if (itt != cached_items.end()) {
+            std::shared_ptr<toml::ordered_value> val =
+                std::make_shared<toml::ordered_value>(table->at(key));
+            Item *aitem = cast_anyitem_to_item(itt->second);
+            aitem->rewrite(val, keypath({}));
+            cached_items.erase(itt);
+        }
+
         // This function is slightly painful, since erase/remove are not implemented
-        // on the ordered_map. We have to pop_back till we find the key, then push the
-        // popped values back without the key in question.
-        auto &vec = toml_value()->as_table();
+        // on the ordered_map. We have to pop_back till we find the key, then push
+        // the popped values back without the key in question.
         std::vector<std::pair<std::string, toml::ordered_value>> popped;
-        auto it = vec.end();
-        while (it != vec.begin()) {
+        auto it = table->end();
+        while (it != table->begin()) {
             it--;
             if (it->first == key) {
                 break;
             }
             popped.push_back(*it);
-            vec.pop_back();
+            table->pop_back();
         }
-        vec.pop_back();
+        table->pop_back();
         for (auto &v : popped) {
-            vec.insert(v);
+            table->insert(v);
         }
     }
 
-    size_t size() {
-        return toml_value()->as_table().size();
+    AnyItem pop(std::string key) {
+        AnyItem item = getitem(key);
+        delitem(key);
+        return item;
     }
+
+    void update(std::map<std::string, AnyItem> values) {
+        for (auto &kv : values) {
+            if (cast_anyitem_to_item(kv.second)->owned()) {
+                std::ostringstream oss;
+                oss << "Cannot update with mapping that contains owned value at key: ";
+                oss << kv.first;
+                throw new py::value_error(oss.str());
+            }
+        }
+        for (auto &kv : values) {
+            setitem(kv.first, kv.second);
+        }
+    }
+
+    size_t size() { return toml_value()->as_table().size(); }
 
     std::shared_ptr<Table> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
         return std::make_shared<Table>(value);
     }
 
     static std::shared_ptr<Table> from_value(std::map<std::string, AnyItem> value) {
-        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(std::map<std::string, toml::ordered_value>());
         for (auto &v : value) {
-            Item *aitem = _cv_anyitem(v.second);
+            Item *aitem = cast_anyitem_to_item(v.second);
             if (aitem->owned()) {
                 throw py::type_error("Value is attached, copy first");
             }
         }
-        for (auto &v : value) {
-            Item *aitem = _cv_anyitem(v.second);
-            toml_value->as_table().insert({v.first, toml::ordered_value(*aitem->root)});
-            aitem->path = keypath({Key(v.first)});
-            aitem->root = toml_value;
+
+        std::shared_ptr<Table> table = std::make_shared<Table>(
+            std::make_shared<toml::ordered_value>(std::map<std::string, toml::ordered_value>()));
+
+        for (auto v : value) {
+            table->setitem(v.first, v.second);
         }
-        return std::make_shared<Table>(toml_value);
+
+        return table;
     }
 
     std::string repr() {
@@ -290,95 +547,176 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
 
         std::string result = "Table({";
         for (auto &kv : value()) {
-            result += "\"" + kv.first + "\": " + _cv_anyitem(kv.second)->repr() + ", ";
+            try {
+                result += "\"" + kv.first + "\": " + cast_anyitem_to_item(kv.second)->repr() + ", ";
+            } catch (const std::exception &e) {
+                result += "\"" + kv.first + "\": <repr-error: " + std::string(e.what()) + ">, ";
+            }
         }
         return result.substr(0, result.size() - 2) + "})";
     }
 };
 
 class Array : public std::enable_shared_from_this<Array>, public Item {
+  protected:
+    std::map<size_t, AnyItem> cached_items;
+
   public:
-    using Item::Item;
+    explicit Array(std::shared_ptr<toml::ordered_value> root, keypath &path)
+        : Item(root, path), cached_items() {}
+
+    explicit Array(std::shared_ptr<toml::ordered_value> root) : Item(root), cached_items() {}
+
+    virtual void rewrite(std::shared_ptr<toml::ordered_value> new_root, keypath new_path) {
+        root = new_root;
+        path = new_path;
+
+        for (auto &kv : cached_items) {
+            auto p = keypath(path);
+            p.emplace_back(kv.first);
+            cast_anyitem_to_item(kv.second)->rewrite(root, p);
+        }
+    }
 
     const std::vector<AnyItem> value() {
         std::vector<AnyItem> result;
-        auto &value = toml_value()->as_array();
-        for (size_t i = 0; i < value.size(); i++) {
-            auto v = value.at(i);
-            auto p = keypath(path);
-            p.emplace_back(i);
-            result.push_back(std::move(to_py_value(root, p)));
+        for (size_t i = 0; i < size(); i++) {
+            result.push_back(getitem(i));
         }
         return result;
     }
 
-    void append(AnyItem item) {
-        Item *aitem = _cv_anyitem(item);
-        if (aitem->owned()) {
-            throw py::type_error("Value is attached, copy first");
-        }
-        auto vec = toml_value()->as_array();
-        vec.push_back(std::move(*aitem->root));
-        aitem->path = keypath(path);
-        aitem->path.emplace_back(vec.size() - 1);
-        aitem->root = root;
-    }
-
-    void insert(size_t index, AnyItem item) {
-        Item *aitem = _cv_anyitem(item);
-        if (aitem->owned()) {
-            throw py::type_error("Value is attached, copy first");
-        }
-        auto vec = toml_value()->as_array();
-        vec.insert(vec.begin() + index, std::move(*aitem->root));
-        aitem->path = keypath(path);
-        aitem->path.emplace_back(index);
-        aitem->root = root;
-    }
-
-    AnyItem pop(size_t index) {
-        auto vec = toml_value()->as_array();
-        auto value = std::make_shared<toml::ordered_value>(vec.at(index));
-        vec.erase(vec.begin() + index);
-
-        auto p = keypath(path);
-        return std::move(to_py_value(value, p));
-    }
-
     AnyItem getitem(size_t index) {
-        auto vec = toml_value()->as_array();
-        if (index >= vec.size()) {
+        if (index >= size()) {
             throw py::index_error("Index out of range");
+        }
+        if (cached_items.find(index) != cached_items.end()) {
+            return cached_items.at(index);
         }
         auto p = keypath(path);
         p.emplace_back(index);
-        return std::move(to_py_value(root, p));
+        cached_items.insert({index, to_py_value(root, p)});
+        return cached_items.at(index);
     }
 
-    size_t size() {
-        return toml_value()->as_array().size();
+    void append(AnyItem item) {
+        Item *aitem = cast_anyitem_to_item(item);
+        if (aitem->owned()) {
+            throw py::type_error("Value is attached, copy first");
+        }
+
+        cached_items.insert({size(), item});
+        auto p = keypath(path);
+        p.emplace_back(size());
+        toml_value()->as_array().emplace_back(*aitem->root);
+        aitem->rewrite(root, p);
     }
+
+    void extend(std::vector<AnyItem> values) {
+        for (auto &v : values) {
+            if (cast_anyitem_to_item(v)->owned()) {
+                throw new py::value_error("Extending list contains owned value");
+            }
+        }
+
+        for (auto &v : values)
+            append(v);
+    }
+
+    void insert(size_t index, AnyItem item) {
+        if (index >= size()) {
+            throw py::index_error("Index out of range");
+        }
+
+        Item *aitem = cast_anyitem_to_item(item);
+        if (aitem->owned()) {
+            throw py::type_error("Value is attached, copy first");
+        }
+
+        // Weird loop eh? But:
+        //   Safe when index == 0
+        //   Shifts cache up post insert index
+        //   Modifies path of contained items.
+        for (size_t i = size(); i >= index + 1; --i) {
+            auto it = cached_items.find(i - 1);
+            if (it == cached_items.end())
+                continue;
+
+            auto p = keypath(path);
+            p.emplace_back(i);
+            cast_anyitem_to_item(it->second)->rewrite(root, p);
+            cached_items.insert({i, it->second});
+            cached_items.erase(i - 1);
+        }
+
+        cached_items.insert({index, item});
+        auto p = keypath(path);
+        p.emplace_back(index);
+        toml_value()->as_array().insert(toml_value()->as_array().begin() + index, *aitem->root);
+        aitem->rewrite(root, p);
+    }
+
+    AnyItem pop(size_t index) {
+        if (index >= size()) {
+            throw py::index_error("Index out of range");
+        }
+
+        auto *vec = &toml_value()->as_array();
+        AnyItem ret;
+
+        auto it = cached_items.find(index);
+        if (it == cached_items.end()) {
+            auto value = std::make_shared<toml::ordered_value>(std::move(vec->at(index)));
+
+            auto p = keypath({});
+            ret = to_py_value(value, p);
+        } else {
+            auto value = std::make_shared<toml::ordered_value>(std::move(vec->at(index)));
+            ret = it->second;
+            cast_anyitem_to_item(ret)->rewrite(value, {});
+            cached_items.erase(index);
+        }
+
+        for (size_t i = index + 1; i < size(); ++i) {
+            auto it = cached_items.find(i);
+            if (it == cached_items.end())
+                continue;
+
+            auto p = keypath(path);
+            p.emplace_back(i - 1);
+            cast_anyitem_to_item(it->second)->rewrite(root, p);
+            cached_items.insert({i - 1, it->second});
+            cached_items.erase(i);
+        }
+
+        vec->erase(vec->begin() + index);
+        return ret;
+    }
+
+    size_t size() { return toml_value()->as_array().size(); }
 
     std::shared_ptr<Array> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
         return std::make_shared<Array>(value);
     }
 
     static std::shared_ptr<Array> from_value(std::vector<AnyItem> value) {
-        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>(std::vector<toml::ordered_value>());
         for (auto &v : value) {
-            Item *aitem = _cv_anyitem(v);
+            Item *aitem = cast_anyitem_to_item(v);
             if (aitem->owned()) {
                 throw py::type_error("Value is attached, copy first");
             }
         }
-        for (size_t i = 0; i < value.size(); i++) {
-            auto v = _cv_anyitem(value.at(i));
-            toml_value->as_array().push_back(std::move(*v->root));
-            v->path = keypath({Key(i)});
-            v->root = toml_value;
+
+        std::shared_ptr<Array> array = std::make_shared<Array>(
+            std::make_shared<toml::ordered_value>(std::vector<toml::ordered_value>()));
+
+        for (auto v : value) {
+            array->append(v);
         }
-        return std::make_shared<Array>(toml_value);
+
+        return array;
     }
 
     std::string repr() {
@@ -388,177 +726,270 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
 
         std::string result = "Array([";
         for (auto v : value()) {
-            result += _cv_anyitem(v)->repr() + ", ";
+            result += cast_anyitem_to_item(v)->repr() + ", ";
         }
         return result.substr(0, result.size() - 2) + "])";
     }
 };
 
-class None : public std::enable_shared_from_this<None>, public Item {
+class Null : public std::enable_shared_from_this<Null>, public Item {
   public:
     using Item::Item;
 
-    std::shared_ptr<None> copy() {
-        std::shared_ptr<toml::ordered_value> value = std::make_shared<toml::ordered_value>(*toml_value());
-        return std::make_shared<None>(value);
+    std::shared_ptr<Null> copy() {
+        std::shared_ptr<toml::ordered_value> value =
+            std::make_shared<toml::ordered_value>(*toml_value());
+        return std::make_shared<Null>(value);
     }
 
     py::none value() { return py::none(); }
 
-    static std::shared_ptr<None> from_value(py::none) {
+    static std::shared_ptr<Null> from_value(py::none) {
         std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>();
-        return std::make_shared<None>(toml_value);
+        return std::make_shared<Null>(toml_value);
     }
 
-    std::string repr() {
-        return "None_(None)";
+    static std::shared_ptr<Null> from_nothing() {
+        std::shared_ptr<toml::ordered_value> toml_value = std::make_shared<toml::ordered_value>();
+        return std::make_shared<Null>(toml_value);
     }
+
+    std::string repr() { return "Null()"; }
 };
 
-AnyItem to_py_value(
-    std::shared_ptr<toml::ordered_value> root,
-    keypath &path
-) {
-    switch(resolve(root, path)->type())
-    {
-        case toml::value_t::empty: return {std::make_shared<None>(root, path)};
-        case toml::value_t::boolean: return {std::make_shared<Boolean>(root, path)};
-        case toml::value_t::integer: return {std::make_shared<Integer>(root, path)};
-        case toml::value_t::floating: return {std::make_shared<Float>(root, path)};
-        case toml::value_t::string: return {std::make_shared<String>(root, path)};
-        case toml::value_t::offset_datetime: return {std::make_shared<None>(root, path)};
-        case toml::value_t::local_datetime: return {std::make_shared<None>(root, path)};
-        case toml::value_t::local_date: return {std::make_shared<None>(root, path)};
-        case toml::value_t::local_time: return {std::make_shared<None>(root, path)};
-        case toml::value_t::array: return {std::make_shared<Array>(root, path)};
-        case toml::value_t::table: return {std::make_shared<Table>(root, path)};
-        default: return {std::make_shared<None>(root, path)};
+AnyItem to_py_value(std::shared_ptr<toml::ordered_value> root, keypath &path) {
+    switch (resolve(root, path)->type()) {
+    case toml::value_t::empty:
+        return {std::make_shared<Null>(root, path)};
+    case toml::value_t::boolean:
+        return {std::make_shared<Boolean>(root, path)};
+    case toml::value_t::integer:
+        return {std::make_shared<Integer>(root, path)};
+    case toml::value_t::floating:
+        return {std::make_shared<Float>(root, path)};
+    case toml::value_t::string:
+        return {std::make_shared<String>(root, path)};
+    case toml::value_t::offset_datetime:
+        return {std::make_shared<DateTime>(root, path)};
+    case toml::value_t::local_datetime:
+        return {std::make_shared<DateTime>(root, path)};
+    case toml::value_t::local_date:
+        return {std::make_shared<Date>(root, path)};
+    case toml::value_t::local_time:
+        return {std::make_shared<Time>(root, path)};
+    case toml::value_t::array:
+        return {std::make_shared<Array>(root, path)};
+    case toml::value_t::table:
+        return {std::make_shared<Table>(root, path)};
+    default:
+        return {std::make_shared<Null>(root, path)};
     }
 }
 
-AnyItem load (std::string filename) {
+AnyItem load(std::string filename) {
     std::shared_ptr<toml::ordered_value> root = std::make_shared<toml::ordered_value>(
-        std::move(toml::parse<toml::ordered_type_config>(filename, default_spec()))
-    );
+        std::move(toml::parse<toml::ordered_type_config>(filename, default_spec())));
 
     auto p = keypath({});
     return std::move(to_py_value(root, p));
 }
 
-void dump (AnyItem item, std::string filename) {
-    Item *aitem = _cv_anyitem(item);
+AnyItem loads(std::string data) {
+    std::shared_ptr<toml::ordered_value> root = std::make_shared<toml::ordered_value>(
+        std::move(toml::parse<toml::ordered_type_config>(data, default_spec())));
+
+    auto p = keypath({});
+    return std::move(to_py_value(root, p));
+}
+
+AnyItem load_from_path(std::filesystem::path path) {
+    std::ifstream file(path);
+    std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return loads(data);
+}
+
+void dump(AnyItem item, std::string filename) {
+    Item *aitem = cast_anyitem_to_item(item);
     std::ofstream file;
     file.open(filename);
     file << toml::format<toml::ordered_type_config>(*aitem->toml_value(), default_spec());
     file.close();
 }
 
-toml::ordered_value from_py_value(py::object obj) {
-    if (py::isinstance<Item>(obj)) {
-        return toml::ordered_value(*(obj.cast<Item>()).toml_value());
-    }
-    else if (py::isinstance<py::none>(obj)) {
-        return toml::ordered_value();
-    }
-    else if (py::isinstance<py::bool_>(obj)) {
-        return toml::ordered_value(obj.cast<bool>());
-    } else if (py::isinstance<py::int_>(obj)) {
-        return toml::ordered_value(obj.cast<std::int64_t>());
-    } else if (py::isinstance<py::str>(obj)) {
-        return toml::ordered_value(obj.cast<std::string>());
-    } else if (py::isinstance<py::list>(obj)) {
-        py::list entries = obj.cast<py::list>();
-        std::vector<toml::ordered_value> converted;
-        for (auto entry : entries) {
-            converted.push_back(
-                std::move(from_py_value(entry.cast<py::object>()))
-            );
-        }
-        return toml::ordered_value(std::move(converted));
-    } else if (py::isinstance<py::dict>(obj)) {
-        py::dict entries = obj.cast<py::dict>();
-        std::map<std::string, toml::ordered_value> converted;
-        for (auto entry : entries) {
-            if (!py::isinstance<py::str>(entry.first))
-                throw new pybind11::type_error("Dict key is not a string");
-            converted.insert({
-                entry.first.cast<std::string>(),
-                std::move(from_py_value(entry.second.cast<py::object>()))
-            });
-        }
-
-        return toml::ordered_value(std::move(converted));
-    }
-
-    throw new pybind11::type_error("Could not be mapped to toml value.");
+std::string dumps(AnyItem item) {
+    Item *aitem = cast_anyitem_to_item(item);
+    return toml::format<toml::ordered_type_config>(*aitem->toml_value(), default_spec());
 }
 
-Item* _cv_anyitem(AnyItem &item) {
-    return std::visit([](auto&& arg) -> Item* { return arg.get(); }, item);
+void dump_to_path(AnyItem item, std::filesystem::path path) {
+    Item *aitem = cast_anyitem_to_item(item);
+    std::ofstream file;
+    file.open(path);
+    file << toml::format<toml::ordered_type_config>(*aitem->toml_value(), default_spec());
+    file.close();
+}
+
+Item *cast_anyitem_to_item(AnyItem &item) {
+    return std::visit([](auto &&arg) -> Item * { return arg.get(); }, item);
 }
 
 PYBIND11_MODULE(_value, m) {
     py::class_<Item, std::shared_ptr<Item>>(m, "Item")
-        .def("get_comments", &Item::get_comments)
-        .def("set_comments", &Item::set_comments)
-        .def("owned", &Item::owned)
+        .def_property("comments", &Item::get_comments, &Item::set_comments)
+        .def_property_readonly("owned", &Item::owned)
         .def("__repr__", &Item::repr);
 
     py::class_<Boolean, std::shared_ptr<Boolean>, Item>(m, "Boolean")
         .def(py::init(&Boolean::from_value))
-        .def("value", &Boolean::value)
+        .def(py::init([](bool value, std::vector<std::string> comments) {
+                 std::shared_ptr<Boolean> b = Boolean::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Boolean::value)
         .def("copy", &Boolean::copy);
 
     py::class_<Integer, std::shared_ptr<Integer>, Item>(m, "Integer")
         .def(py::init(&Integer::from_value))
-        .def("value", &Integer::value)
+        .def(py::init([](uint64_t value, std::vector<std::string> comments) {
+                 std::shared_ptr<Integer> b = Integer::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Integer::value)
         .def("copy", &Integer::copy);
 
     py::class_<Float, std::shared_ptr<Float>, Item>(m, "Float")
         .def(py::init(&Float::from_value))
-        .def("value", &Float::value)
+        .def(py::init([](double value, std::vector<std::string> comments) {
+                 std::shared_ptr<Float> b = Float::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Float::value)
         .def("copy", &Float::copy);
 
     py::class_<String, std::shared_ptr<String>, Item>(m, "String")
         .def(py::init(&String::from_value))
-        .def("value", &String::value)
+        .def(py::init([](std::string value, std::vector<std::string> comments) {
+                 std::shared_ptr<String> b = String::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &String::value)
         .def("copy", &String::copy);
 
     py::class_<Table, std::shared_ptr<Table>, Item>(m, "Table")
         .def(py::init(&Table::from_value))
-        .def("value", &Table::value)
+        .def(py::init([](std::map<std::string, AnyItem> value, std::vector<std::string> comments) {
+                 std::shared_ptr<Table> b = Table::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Table::value)
         .def("__getitem__", &Table::getitem)
         .def("__setitem__", &Table::setitem)
         .def("__delitem__", &Table::delitem)
+        .def("update", &Table::update)
         .def("copy", &Table::copy)
+        .def("pop", &Table::pop)
         .def("__len__", &Table::size)
         .def("__contains__", [](std::shared_ptr<Table> table, std::string key) {
-            return table->toml_value()->contains(key);
+            auto *tab = &table->toml_value()->as_table();
+            return (tab->find(key) != tab->end());
         });
 
     py::class_<Array, std::shared_ptr<Array>, Item>(m, "Array")
         .def(py::init(&Array::from_value))
-        .def("value", &Array::value)
-        .def("append", &Array::append)
-        .def("insert", &Array::insert)
+        .def(py::init([](std::vector<AnyItem> value, std::vector<std::string> comments) {
+                 std::shared_ptr<Array> b = Array::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Array::value)
         .def("copy", &Array::copy)
         .def("__len__", &Array::size)
         .def("__getitem__", &Array::getitem)
+        .def("append", &Array::append)
+        .def("extend", &Array::extend)
+        .def("insert", &Array::insert)
         .def("__setitem__", &Array::insert)
         .def("__delitem__", &Array::pop)
-        .def("pop", &Array::pop)
-        .def("__iter__", [](std::shared_ptr<Array> array) {
-            auto items = array->value();
-            return py::make_iterator(items.begin(), items.end());
-        }, py::keep_alive<0, 1>());
+        .def("pop", &Array::pop);
 
-    py::class_<None, std::shared_ptr<None>, Item>(m, "None_")
-        .def(py::init(&None::from_value))
-        .def("value", &None::value)
-        .def("copy", &None::copy);
+    py::class_<Null, std::shared_ptr<Null>, Item>(m, "Null")
+        .def(py::init(&Null::from_value))
+        .def(py::init([](py::none value, std::vector<std::string> comments) {
+                 std::shared_ptr<Null> b = Null::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def(py::init(&Null::from_nothing))
+        .def(py::init([](std::vector<std::string> comments) {
+                 std::shared_ptr<Null> b = Null::from_nothing();
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Null::value)
+        .def("copy", &Null::copy);
+
+    py::class_<Date, std::shared_ptr<Date>, Item>(m, "Date")
+        .def(py::init(&Date::from_value))
+        .def(py::init([](py::object value, std::vector<std::string> comments) {
+                 std::shared_ptr<Date> b = Date::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Date::value)
+        .def("copy", &Date::copy);
+
+    py::class_<Time, std::shared_ptr<Time>, Item>(m, "Time")
+        .def(py::init(&Time::from_value))
+        .def(py::init(&Time::from_value_with_nanoseconds))
+        .def(py::init([](py::object value, std::vector<std::string> comments) {
+                 std::shared_ptr<Time> b = Time::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def(
+            py::init([](py::object value, uint16_t nanoseconds, std::vector<std::string> comments) {
+                std::shared_ptr<Time> b = Time::from_value_with_nanoseconds(value, nanoseconds);
+                b->set_comments(comments);
+                return b;
+            }),
+            py::arg("value"), py::arg("nanoseconds"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &Time::value)
+        .def_property_readonly("nanoseconds", &Time::nanoseconds)
+        .def("copy", &Time::copy);
+
+    py::class_<DateTime, std::shared_ptr<DateTime>, Item>(m, "DateTime")
+        .def(py::init(&DateTime::from_value))
+        .def(py::init([](py::object value, std::vector<std::string> comments) {
+                 std::shared_ptr<DateTime> b = DateTime::from_value(value);
+                 b->set_comments(comments);
+                 return b;
+             }),
+             py::arg("value"), py::kw_only(), py::arg("comments"))
+        .def_property_readonly("value", &DateTime::value)
+        .def_property_readonly("nanoseconds", &DateTime::nanoseconds)
+        .def("copy", &DateTime::copy);
 
     m.def("load", &load);
+    m.def("load", &load_from_path);
+    m.def("loads", &loads);
     m.def("dump", &dump);
+    m.def("dump", &dump_to_path);
+    m.def("dumps", &dumps);
 
     py::register_exception<toml::exception>(m, "TomlError");
 }
