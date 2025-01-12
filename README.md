@@ -11,7 +11,7 @@
 
 While `tomlkit` focuses on preserving both formatting and comments, its API can be inconsistent, and it occasionally exhibits weird edge case behavior. On the other hand, **`pytoml11`**, by using toml11:
 
-- Does not retain formatting but ensures clean, sorted output.
+- Does not retain whitespace but ensures clean, order-retaining output.
 - Always preserves comments.
 - Offers a simple, reliable, and predictable interface.
 
@@ -40,7 +40,7 @@ toml_data = pytoml11.load("example.toml")
 # Modify a value
 toml_data["database"]["port"] = pytoml11.Integer(3306)
 
-# Write back to the file with sorted formatting, preserving comments
+# Write back to the file, preserving comments and order
 pytoml11.dump(toml_data, "example.toml")
 ```
 
@@ -72,7 +72,7 @@ print(new_toml_string)
 - **`rtoml`**: A high-performance TOML library implemented in Rust, focused on parsing and serialization, not editing.
 - **`tomlkit`**: Retains both comments and formatting but has known edge case issues and an inconsistent API.
 
-**`pytoml11`** provides a middle ground by prioritizing comment preservation, sorted output, and API reliability.
+**`pytoml11`** provides a middle ground by prioritizing comment and order preservation plus API reliability.
 
 ## Contributing
 

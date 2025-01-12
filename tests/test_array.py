@@ -97,3 +97,13 @@ def test_array_extend():
     assert array[1].owned is True
     assert array[2].owned is True
     assert array[3].owned is True
+
+
+def test_array_clear():
+    val = Integer(1)
+    array = Array([val, Boolean(True), String("hello")])
+    assert val.owned is True
+    array.clear()
+    assert len(array) == 0
+    assert array.value == []
+    assert val.owned is False

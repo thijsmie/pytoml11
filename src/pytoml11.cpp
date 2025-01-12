@@ -419,10 +419,14 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
   public:
     using Item::Item;
 
-    std::map<std::string, AnyItem> value() {
-        std::map<std::string, AnyItem> result;
-        for (auto &v : toml_value()->as_table()) {
-            result[v.first] = getitem(v.first);
+    py::dict value() {
+        py::dict result = py::dict();
+        for (
+            auto it = toml_value()->as_table().begin();
+            it != toml_value()->as_table().end();
+            ++it
+        ) {
+            result[py::str(it->first)] = getitem(it->first);
         }
         return result;
     }
@@ -450,10 +454,30 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
 
         auto *table = &toml_value()->as_table();
         if (table->find(key) != table->end()) {
-            delitem(key);
+            // Need swapping approach to avoid messing up the dict order
+            auto itt = cached_items.find(key);
+            if (itt != cached_items.end()) {
+                std::shared_ptr<toml::ordered_value> val =
+                    std::make_shared<toml::ordered_value>(table->at(key));
+                Item *aitem = cast_anyitem_to_item(itt->second);
+                aitem->rewrite(val, keypath({}));
+                cached_items.erase(itt);
+            }
+
+            toml::ordered_map<std::string, toml::ordered_value> new_table;
+            for (auto &kv : *table) {
+                if (kv.first != key) {
+                    new_table.insert(kv);
+                } else {
+                    new_table.insert({key, std::move(*aitem->root)});
+                }
+            }
+            /// swap
+            table->swap(new_table);
+        } else {
+            toml_value()->as_table().push_back({key, std::move(*aitem->root)});
         }
 
-        toml_value()->as_table().insert({key, std::move(*aitem->root)});
         auto p = keypath(path);
         p.emplace_back(key);
         aitem->rewrite(root, p);
@@ -494,8 +518,14 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         return item;
     }
 
-    void update(std::map<std::string, AnyItem> values) {
+    void update(py::dict values) {
+        std::vector<std::pair<std::string, AnyItem>> items;
+
         for (auto &kv : values) {
+            items.push_back({kv.first.cast<std::string>(), kv.second.cast<AnyItem>()});
+        }
+
+        for (auto &kv : items) {
             if (cast_anyitem_to_item(kv.second)->owned()) {
                 std::ostringstream oss;
                 oss << "Cannot update with mapping that contains owned value at key: ";
@@ -503,7 +533,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
                 throw py::value_error(oss.str());
             }
         }
-        for (auto &kv : values) {
+        for (auto &kv : items) {
             setitem(kv.first, kv.second);
         }
     }
@@ -516,8 +546,13 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         return std::make_shared<Table>(value);
     }
 
-    static std::shared_ptr<Table> from_value(std::map<std::string, AnyItem> value) {
-        for (auto &v : value) {
+    static std::shared_ptr<Table> from_value(py::dict value) {
+        std::vector<std::pair<std::string, AnyItem>> items;
+        for (auto &kv : value) {
+            items.push_back({kv.first.cast<std::string>(), kv.second.cast<AnyItem>()});
+        }
+
+        for (auto &v : items) {
             Item *aitem = cast_anyitem_to_item(v.second);
             if (aitem->owned()) {
                 throw py::type_error("Value is attached, copy first");
@@ -527,7 +562,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         std::shared_ptr<Table> table = std::make_shared<Table>(
             std::make_shared<toml::ordered_value>(std::map<std::string, toml::ordered_value>()));
 
-        for (auto v : value) {
+        for (auto v : items) {
             table->setitem(v.first, v.second);
         }
 
@@ -540,9 +575,10 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         }
 
         std::string result = "Table({";
-        for (auto &kv : value()) {
+        for (auto &kv : toml_value()->as_table()) {
+            AnyItem item = getitem(kv.first);
             try {
-                result += "\"" + kv.first + "\": " + cast_anyitem_to_item(kv.second)->repr() + ", ";
+                result += "\"" + kv.first + "\": " + cast_anyitem_to_item(item)->repr() + ", ";
             } catch (const std::exception &e) {
                 result += "\"" + kv.first + "\": <repr-error: " + std::string(e.what()) + ">, ";
             }
@@ -648,6 +684,21 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         p.emplace_back(index);
         toml_value()->as_array().insert(toml_value()->as_array().begin() + index, *aitem->root);
         aitem->rewrite(root, p);
+    }
+
+    void clear() {
+        for (size_t i = 0; i < size(); ++i) {
+            auto it = cached_items.find(i);
+            if (it == cached_items.end())
+                continue;
+
+            cast_anyitem_to_item(it->second)->rewrite(
+                std::make_shared<toml::ordered_value>(toml_value()->as_array().at(i)),
+                {}
+            );
+        }
+        cached_items.clear();
+        toml_value()->as_array().clear();
     }
 
     AnyItem pop(size_t index) {
@@ -790,7 +841,7 @@ AnyItem load(std::string filename) {
 
 AnyItem loads(std::string data) {
     std::shared_ptr<toml::ordered_value> root = std::make_shared<toml::ordered_value>(
-        std::move(toml::parse<toml::ordered_type_config>(data, default_spec())));
+        std::move(toml::parse_str<toml::ordered_type_config>(data, default_spec())));
 
     auto p = keypath({});
     return std::move(to_py_value(root, p));
@@ -879,7 +930,7 @@ PYBIND11_MODULE(_value, m) {
 
     py::class_<Table, std::shared_ptr<Table>, Item>(m, "Table")
         .def(py::init(&Table::from_value))
-        .def(py::init([](std::map<std::string, AnyItem> value, std::vector<std::string> comments) {
+        .def(py::init([](py::dict value, std::vector<std::string> comments) {
                  std::shared_ptr<Table> b = Table::from_value(value);
                  b->set_comments(comments);
                  return b;
@@ -892,6 +943,18 @@ PYBIND11_MODULE(_value, m) {
         .def("update", &Table::update)
         .def("copy", &Table::copy)
         .def("pop", &Table::pop)
+        .def("get", [](std::shared_ptr<Table> table, std::string key) -> std::variant<py::none, AnyItem> {
+            if (table->toml_value()->as_table().find(key) == table->toml_value()->as_table().end()) {
+                return py::none();
+            }
+            return table->getitem(key);
+        })
+        .def("get", [](std::shared_ptr<Table> table, std::string key, py::object default_value) -> std::variant<py::object, AnyItem> {
+            if (table->toml_value()->as_table().find(key) == table->toml_value()->as_table().end()) {
+                return default_value;
+            }
+            return table->getitem(key);
+        })
         .def("__len__", &Table::size)
         .def("__contains__", [](std::shared_ptr<Table> table, std::string key) {
             auto *tab = &table->toml_value()->as_table();
@@ -913,6 +976,7 @@ PYBIND11_MODULE(_value, m) {
         .def("append", &Array::append)
         .def("extend", &Array::extend)
         .def("insert", &Array::insert)
+        .def("clear", &Array::clear)
         .def("__setitem__", &Array::insert)
         .def("__delitem__", &Array::pop)
         .def("pop", &Array::pop);

@@ -1,4 +1,4 @@
-from pytoml11 import Boolean, Integer, String, Table
+from pytoml11 import Boolean, Integer, String, Table, dumps
 
 
 def test_init_table():
@@ -132,3 +132,48 @@ def test_table_del_then_set():
     table["key"] = Integer(2)
     assert table["key"].value == 2
     assert len(table) == 1
+
+
+def test_table_initial_order_retained():
+    table = Table({
+        str(i): Integer(i)
+        for i in range(100)
+    })
+
+    assert list(table.value.keys()) == [str(i) for i in range(100)]
+    assert dumps(table) == "\n".join(
+        f"{i} = {i}"
+        for i in range(100)
+    ) + "\n\n"
+
+
+def test_table_initial_order_retained_on_setitem():
+    table = Table({
+        str(i): Integer(i)
+        for i in range(100)
+    })
+
+    table["50"] = Integer(150)
+
+    assert list(table.value.keys()) == [str(i) for i in range(100)]
+
+
+def test_table_initial_order_retained_on_update():
+    table = Table({
+        str(i): Integer(i)
+        for i in range(50)
+    })
+
+    table.update({
+        str(i): Integer(i + 1)
+        for i in range(100)
+    })
+
+    assert list(table.value.keys()) == [str(i) for i in range(100)]
+
+
+def test_table_get_value():
+    table = Table({"key": Integer(42)})
+    assert table.get("key").value == 42
+    assert table.get("missing_key") is None
+    assert table.get("missing_key", Integer(42)).value == 42
