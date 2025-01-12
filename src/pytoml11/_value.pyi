@@ -109,6 +109,7 @@ class Array(Item):
         ],
     ) -> None: ...
     def copy(self) -> Array: ...
+    def clear() -> None: ...
     def insert(
         self,
         index: int,
@@ -288,6 +289,36 @@ class Table(Item):
         | Time
         | DateTime,
     ]: ...
+    @typing.override
+    def get(
+        self, key: str, default: None = None
+    ) -> (
+        Boolean
+        | Integer
+        | Float
+        | String
+        | Table
+        | Array
+        | Null
+        | Date
+        | Time
+        | DateTime
+    ): ...
+    def get[T](
+        self, key: str, default: T
+    ) -> (
+        Boolean
+        | Integer
+        | Float
+        | String
+        | Table
+        | Array
+        | Null
+        | Date
+        | Time
+        | DateTime
+        | T
+    ): ...
 
 class Time(Item):
     """A TOML time value. May include nanoseconds."""
