@@ -878,10 +878,17 @@ Item *cast_anyitem_to_item(AnyItem &item) {
     return std::visit([](auto &&arg) -> Item * { return arg.get(); }, item);
 }
 
+bool items_equal(AnyItem &a, AnyItem &b) {
+    Item *item_a = cast_anyitem_to_item(a);
+    Item *item_b = cast_anyitem_to_item(b);
+    return *item_a->toml_value() == *item_b->toml_value();
+}
+
 PYBIND11_MODULE(_value, m) {
     py::class_<Item, std::shared_ptr<Item>>(m, "Item")
         .def_property("comments", &Item::get_comments, &Item::set_comments)
         .def_property_readonly("owned", &Item::owned)
+        .def("__eq__", &items_equal, py::is_operator())
         .def("__repr__", &Item::repr);
 
     py::class_<Boolean, std::shared_ptr<Boolean>, Item>(m, "Boolean")
