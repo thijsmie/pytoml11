@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pytoml11"
-version = "0.0.3"
+version = "0.0.4"
 description="Bindings for toml11"
 readme = "README.md"
 authors = [
@@ -90,4 +90,41 @@ dev = [
     "pybind11-stubgen>=2.5.1",
     "pybind11>=2.13.6",
     "pytest>=8.3.4",
+]
+
+[tool.fonk]
+default = { command="all", flags=["fix"] }
+flags = [
+  { name = "fix", description = "Autofix issues where possible" }
+]
+
+[tool.fonk.alias.all]
+commands = ["ruff-format", "ruff-check", "pytest"]
+flags = ["fix"]
+
+[tool.fonk.command.ruff-format]
+type = "uvx"
+arguments = ["ruff", "format", "--check", "src/pytoml11"]
+flags = [
+  { on = "fix", remove = "--check" },
+  { on = "verbose", add = "--verbose" },
+  { on = "quiet", add = "--quiet" },
+]
+
+[tool.fonk.command.ruff-check]
+type = "uvx"
+arguments = ["ruff", "check", "src/pytoml11"]
+flags = [
+  { on = "fix", add = "--fix" },
+  { on = "verbose", add = "--verbose" },
+  { on = "quiet", add = "--quiet" },
+]
+
+[tool.fonk.command.pytest]
+type = "uv"
+arguments = ["pytest", "tests"]
+flags = [
+  { on = "verbose", add = "-vvv" },
+  { on = "quiet", add = "-q" },
+  { on = "fail-quick", add = "-x"},
 ]

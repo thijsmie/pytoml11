@@ -107,3 +107,16 @@ def test_array_clear():
     assert len(array) == 0
     assert array.value == []
     assert val.owned is False
+
+
+def test_array_contains():
+    val = Integer(1)
+    array = Array([val, Boolean(True), String("hello")])
+    assert val in array
+    assert Boolean(True) in array
+    assert String("hello") in array
+    assert Integer(42) not in array
+    assert Boolean(False) not in array
+    assert String("world") not in array
+    assert Array([]) not in array
+    assert Array([Integer(2)]) not in array
