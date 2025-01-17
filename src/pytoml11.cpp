@@ -986,7 +986,16 @@ PYBIND11_MODULE(_value, m) {
         .def("clear", &Array::clear)
         .def("__setitem__", &Array::insert)
         .def("__delitem__", &Array::pop)
-        .def("pop", &Array::pop);
+        .def("pop", &Array::pop)
+        .def("__contains__", [](std::shared_ptr<Array> array, AnyItem item) {
+            for (size_t i = 0; i < array->size(); i++) {
+                AnyItem aitem = array->getitem(i);
+                if (items_equal(aitem, item)) {
+                    return true;
+                }
+            }
+            return false;
+        });
 
     py::class_<Null, std::shared_ptr<Null>, Item>(m, "Null")
         .def(py::init(&Null::from_value))
