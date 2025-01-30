@@ -1,0 +1,20 @@
+# serializer version: 1
+# name: test_array_unset_aot
+  '''
+  array = [
+  {a = 0},
+  {b = 1},
+  true,
+  ]
+  
+  
+  '''
+# ---
+# name: test_table_no_implicit_empty
+  '''
+      [table.b]
+      c = 1
+  
+  
+  '''
+# ---

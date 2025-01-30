@@ -399,11 +399,35 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
   protected:
     std::map<std::string, AnyItem> cached_items;
 
+    void ensure_acceptable_formatting() {
+        bool contains_non_table_value = false;
+        bool has_more_than_one_key = toml_value()->as_table().size() > 1;
+
+        for (auto &kv : toml_value()->as_table()) {
+            if (kv.second.type() != toml::value_t::table) {
+                contains_non_table_value = true;
+                break;
+            }
+        }
+
+        auto &formatting = toml_value()->as_table_fmt();
+
+        if (formatting.fmt == toml::table_format::implicit && contains_non_table_value) {
+            formatting.fmt = toml::table_format::multiline;
+        } else if (formatting.fmt == toml::table_format::multiline && !contains_non_table_value) {
+            formatting.fmt = toml::table_format::implicit;
+        }
+    }
+
   public:
     explicit Table(std::shared_ptr<toml::ordered_value> root, keypath &path)
-        : Item(root, path), cached_items() {}
+        : Item(root, path), cached_items() {
+            ensure_acceptable_formatting();
+        }
 
-    explicit Table(std::shared_ptr<toml::ordered_value> root) : Item(root), cached_items() {}
+    explicit Table(std::shared_ptr<toml::ordered_value> root) : Item(root), cached_items() {
+        ensure_acceptable_formatting();
+    }
 
     virtual void rewrite(std::shared_ptr<toml::ordered_value> new_root, keypath new_path) {
         root = new_root;
@@ -415,9 +439,6 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
             cast_anyitem_to_item(kv.second)->rewrite(root, p);
         }
     }
-
-  public:
-    using Item::Item;
 
     py::dict value() {
         py::dict result = py::dict();
@@ -482,6 +503,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         p.emplace_back(key);
         aitem->rewrite(root, p);
         cached_items.insert({key, item});
+        ensure_acceptable_formatting();
     }
 
     void delitem(const std::string &key) {
@@ -510,6 +532,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         }
         /// swap
         table->swap(new_table);
+        ensure_acceptable_formatting();
     }
 
     AnyItem pop(std::string key) {
@@ -536,6 +559,7 @@ class Table : public std::enable_shared_from_this<Table>, public Item {
         for (auto &kv : items) {
             setitem(kv.first, kv.second);
         }
+        ensure_acceptable_formatting();
     }
 
     size_t size() { return toml_value()->as_table().size(); }
@@ -591,11 +615,31 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
   protected:
     std::map<size_t, AnyItem> cached_items;
 
+    void ensure_acceptable_formatting() {
+        bool contains_non_table_value = false;
+        for (auto &kv : toml_value()->as_array()) {
+            if (kv.type() != toml::value_t::table) {
+                contains_non_table_value = true;
+                break;
+            }
+        }
+
+        auto &formatting = toml_value()->as_array_fmt();
+
+        if (formatting.fmt == toml::array_format::array_of_tables && contains_non_table_value) {
+            formatting.fmt = toml::array_format::default_format;
+        }
+    }
+
   public:
     explicit Array(std::shared_ptr<toml::ordered_value> root, keypath &path)
-        : Item(root, path), cached_items() {}
+        : Item(root, path), cached_items() {
+            ensure_acceptable_formatting();
+        }
 
-    explicit Array(std::shared_ptr<toml::ordered_value> root) : Item(root), cached_items() {}
+    explicit Array(std::shared_ptr<toml::ordered_value> root) : Item(root), cached_items() {
+        ensure_acceptable_formatting();
+    }
 
     virtual void rewrite(std::shared_ptr<toml::ordered_value> new_root, keypath new_path) {
         root = new_root;
@@ -640,6 +684,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         p.emplace_back(size());
         toml_value()->as_array().emplace_back(*aitem->root);
         aitem->rewrite(root, p);
+        ensure_acceptable_formatting();
     }
 
     void extend(std::vector<AnyItem> values) {
@@ -684,6 +729,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         p.emplace_back(index);
         toml_value()->as_array().insert(toml_value()->as_array().begin() + index, *aitem->root);
         aitem->rewrite(root, p);
+        ensure_acceptable_formatting();
     }
 
     void clear() {
@@ -699,6 +745,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         }
         cached_items.clear();
         toml_value()->as_array().clear();
+        ensure_acceptable_formatting();
     }
 
     AnyItem pop(size_t index) {
@@ -735,6 +782,7 @@ class Array : public std::enable_shared_from_this<Array>, public Item {
         }
 
         vec->erase(vec->begin() + index);
+        ensure_acceptable_formatting();
         return ret;
     }
 
