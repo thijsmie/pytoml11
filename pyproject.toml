@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pytoml11"
-version = "0.0.4"
+version = "0.0.5"
 description="Bindings for toml11"
 readme = "README.md"
 authors = [
@@ -24,9 +24,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "syrupy"]
 ci = ["cibuildwheel"]
-test = ["pytest"]
+test = ["pytest", "syrupy"]
 
 
 [tool.scikit-build]
